@@ -1,0 +1,119 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r packages, message = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(rlist)
+library(ISLR2)
+library(glmnet)
+library(readxl)
+require(methods)
+library(caret)
+```
+
+```{r loading data, message = FALSE, echo = FALSE}
+
+# Flaring Dataset
+flaringdata2 <- read_excel("MiddleEast_Africa_Filtered.xlsx")
+flaringdata2 <- flaringdata2%>%filter(Year<2021, Year>1983)
+
+# Oil and Gas Price Dataset
+PricesData <- read_excel("PricesData.xlsx")
+  
+```
+
+```{r OilGasPrices}
+
+# Adding Oil and Gas Prices to the Flaring Dataset
+
+
+oil_prices <- list()
+
+for(i in 1:nrow(flaringdata2)) {
+  for(j in 1:nrow(PricesData)) {
+    if (flaringdata2[i, 2] == PricesData[j, 1]) {
+      oil_prices <- append(oil_prices, (PricesData[j, 2]))
+    }
+  }
+}
+
+gas_prices <- list()
+for(i in 1:nrow(flaringdata2)) {
+  for(j in 1:nrow(PricesData)) {
+    if (flaringdata2[i, 2] == PricesData[j, 1]) {
+      gas_prices <- append(gas_prices, (PricesData[j, 3]))
+    }
+  }
+}
+
+# Adding new columns to consolidated dataset 
+flaringdata2$oil_price <- oil_prices
+flaringdata2$gas_price <- gas_prices
+
+# Converting added columns into numeric type
+flaringdata2$oil_price <- as.numeric(as.character(flaringdata2$oil_price))
+flaringdata2$gas_price <- as.numeric(as.character(flaringdata2$gas_price))
+
+```
+
+```{r scaling}
+
+# Selecting independent and dependent variables of interest
+x <- (flaringdata2[, -c(1, 2, 3, 4, 6, 11, 12)])
+y <- flaringdata2$gasflared_bcm
+
+# Normalizing data to range 0-1
+process <- preProcess(as.data.frame(x), method=c("range"))
+x_scale <- predict(process, as.data.frame(x))
+
+process <- preProcess(as.data.frame(y), method=c("range"))
+y_scale <- predict(process, as.data.frame(y))
+y_vector <- y_scale$y
+
+# Generating sparse matrix of explanatory variables for regression
+x_mat <- model.matrix(~ ., x_scale) [, -1]
+
+```
+
+
+```{r train_test_split}
+
+# Splitting data into training (80%) and test (20%) datasets
+set.seed (1)
+train <- sample (1: nrow(x_mat), nrow(x_mat) / 1.25)
+test <- (-train)
+y_vector.test <- y_vector[test]
+
+```
+
+```{r LASSO}
+
+# Regression with L1 Penalty
+flare_lasso <- glmnet(x_mat[train, ], y_vector[train], alpha = 1)
+
+```
+
+```{r cross-validation}
+
+# Minimizing loss function with selection of lambda through cross-validation
+set.seed (1)
+cv.out <- cv.glmnet(x_mat[train , ], y_vector[train], alpha = 1)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+lasso.pred <- predict(flare_lasso , s = bestlam ,
+newx = x_mat[test , ])
+mean (( lasso.pred - y_vector.test)^2)
+```
+```{r coeffs}
+
+# Obtaining weights for explanatory variables
+out <- glmnet (x_mat, y_vector, alpha = 1)
+lasso.coef <- predict (out , type = "coefficients",
+s = bestlam)[1:8, ]
+lasso.coef
+```
+
