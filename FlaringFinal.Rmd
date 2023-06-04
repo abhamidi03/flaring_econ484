@@ -1,6 +1,8 @@
 ---
-title: "R Notebook"
+title: "Flaring Analysis"
 output: html_notebook
+authors: Atreya Bhamidi, Nandini Daga
+date: 06/03/2023
 ---
 
 
